@@ -33,7 +33,7 @@ var clients = [
 		"client_id": "oauth-client-1",
 		"client_secret": "oauth-client-secret-1",
 		"redirect_uris": ["http://localhost:9000/callback"],
-		"scope": "openid profile email phone address"
+		"scope": "foo bar"
 	}
 ];
 
@@ -48,31 +48,6 @@ var rsaKey = {
 
 var userInfo = {
 
-	"alice": {
-		"sub": "9XE3-JI34-00132A",
-		"preferred_username": "alice",
-		"name": "Alice",
-		"email": "alice.wonderland@example.com",
-		"email_verified": true
-	},
-	
-	"bob": {
-		"sub": "1ZT5-OE63-57383B",
-		"preferred_username": "bob",
-		"name": "Bob",
-		"email": "bob.loblob@example.net",
-		"email_verified": false
-	},
-
-	"carol": {
-		"sub": "F5Q1-L6LGG-959FS",
-		"preferred_username": "carol",
-		"name": "Carol",
-		"email": "carol.lewis@example.net",
-		"email_verified": true,
-		"username" : "clewis",
-		"password" : "user password!"
- 	}	
 };
 
 var getUser = function(username) {
@@ -234,67 +209,19 @@ app.post("/token", function(req, res){
 			delete codes[req.body.code]; // burn our code, it's been used
 			if (code.request.client_id == clientId) {
 
-				var header = { 'typ': 'JWT', 'alg': rsaKey.alg, 'kid': rsaKey.kid};
-
-				/*
-				var payload = {
-					iss: 'http://localhost:9001/',
-					sub: code.user ? code.user.sub : null,
-					aud: 'http://localhost:9002/',
-					iat: Math.floor(Date.now() / 1000),
-					exp: Math.floor(Date.now() / 1000) + (5 * 60),
-					jti: randomstring.generate(8)
-				};
-
-				console.log(payload);
-
-				var stringHeader = JSON.stringify(header);
-				var stringPayload = JSON.stringify(payload);
-				//var encodedHeader = base64url.encode(JSON.stringify(header));
-				//var encodedPayload = base64url.encode(JSON.stringify(payload));
-
-				//var access_token = encodedHeader + '.' + encodedPayload + '.';
-				//var access_token = jose.jws.JWS.sign('HS256', stringHeader, stringPayload, new Buffer(sharedTokenSecret).toString('hex'));
-
-				var privateKey = jose.KEYUTIL.getKey(rsaKey);
-				var access_token = jose.jws.JWS.sign(rsaKey.alg, stringHeader, stringPayload, privateKey);
-				*/
-				
 				var access_token = randomstring.generate();
+
 				nosql.insert({ access_token: access_token, client_id: clientId, scope: code.scope, user: code.user });
 
 				console.log('Issuing access token %s', access_token);
-				console.log('with scope %s', code.scope);
+				console.log('with scope %s', access_token, code.scope);
 
 				var cscope = null;
 				if (code.scope) {
 					cscope = code.scope.join(' ');
 				}
 
-				var token_response = { access_token: access_token, token_type: 'Bearer',  scope: cscope };
-
-				if (__.contains(code.scope, 'openid')) {
-					var ipayload = {
-						iss: 'http://localhost:9001/',
-						sub: code.user.sub,
-						aud: client.client_id,
-						iat: Math.floor(Date.now() / 1000),
-						exp: Math.floor(Date.now() / 1000) + (5 * 60)	
-					};
-					if (code.request.nonce) {
-						ipayload.nonce = code.request.nonce;
-					}
-
-					var istringHeader = JSON.stringify(header);
-					var istringPayload = JSON.stringify(ipayload);
-					var privateKey = jose.KEYUTIL.getKey(rsaKey);
-					var id_token = jose.jws.JWS.sign(rsaKey.alg, istringHeader, istringPayload, privateKey);
-
-					console.log('Issuing ID token %s', id_token);
-
-					token_response.id_token = id_token;
-
-				}
+				var token_response = { access_token: access_token, token_type: 'Bearer', scope: cscope };
 
 				res.status(200).json(token_response);
 				console.log('Issued tokens for code %s', req.body.code);
