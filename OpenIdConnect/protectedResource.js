@@ -29,8 +29,6 @@ var resource = {
 	"description": "This data has been protected by OAuth 2.0"
 };
 
-var sharedTokenSecret = "shared token secret!";
-
 var rsaKey = {
   "alg": "RS256",
   "e": "AQAB",
@@ -38,16 +36,6 @@ var rsaKey = {
   "kty": "RSA",
   "kid": "authserver"
 };
-
-var protectedResources = {
-		"resource_id": "protected-resource-1",
-		"resource_secret": "protected-resource-secret-1"
-};
-
-var authServer = {
-	introspectionEndpoint: 'http://localhost:9001/introspect'
-};
-
 
 var getAccessToken = function(req, res, next) {
 	// check the auth header first
@@ -63,7 +51,6 @@ var getAccessToken = function(req, res, next) {
 	}
 	
 	console.log('Incoming token: %s', inToken);
-	/*
 	nosql.one(function(token) {
 		if (token.access_token == inToken) {
 			return token;	
@@ -78,71 +65,6 @@ var getAccessToken = function(req, res, next) {
 		next();
 		return;
 	});
-	*/
-	/*
-	//var signatureValid = jose.jws.JWS.verify(inToken, new Buffer(sharedTokenSecret).toString('hex'), ['HS256']);
-	var pubKey = jose.KEYUTIL.getKey(rsaKey);
-	var signatureValid = jose.jws.JWS.verify(inToken, pubKey, ['RS256']);
-	if (signatureValid) {
-		console.log('Signature validated.');
-		var tokenParts = inToken.split('.');
-		var payload = JSON.parse(base64url.decode(tokenParts[1]));
-		console.log('Payload', payload);
-		if (payload.iss == 'http://localhost:9001/') {
-			console.log('issuer OK');
-			if ((Array.isArray(payload.aud) && _.contains(payload.aud, 'http://localhost:9002/')) || 
-				payload.aud == 'http://localhost:9002/') {
-				console.log('Audience OK');
-				
-				var now = Math.floor(Date.now() / 1000);
-				
-				if (payload.iat <= now) {
-					console.log('issued-at OK');
-					if (payload.exp >= now) {
-						console.log('expiration OK');
-						
-						console.log('Token valid!');
-		
-						req.access_token = payload;
-						
-					}
-				}
-			}
-			
-		}
-			
-
-	}
-	next();
-	return;
-	*/
-	
-	var form_data = qs.stringify({
-		token: inToken
-	});
-	var headers = {
-		'Content-Type': 'application/x-www-form-urlencoded',
-		'Authorization': 'Basic ' + new Buffer(querystring.escape(protectedResources.resource_id) + ':' + querystring.escape(protectedResources.resource_secret)).toString('base64')
-	};
-
-	var tokRes = request('POST', authServer.introspectionEndpoint, 
-		{	
-			body: form_data,
-			headers: headers
-		}
-	);
-	
-	if (tokRes.statusCode >= 200 && tokRes.statusCode < 300) {
-		var body = JSON.parse(tokRes.getBody());
-	
-		console.log('Got introspection response', body);
-		var active = body.active;
-		if (active) {
-			req.access_token = body;
-		}
-	}
-	next();
-	return;
 	
 };
 
@@ -154,82 +76,10 @@ var requireAccessToken = function(req, res, next) {
 	}
 };
 
-
-var savedWords = [];
-
-app.get('/words', getAccessToken, requireAccessToken, function(req, res) {
-	if (__.contains(req.access_token.scope, 'read')) {
-		res.json({words: savedWords.join(' '), timestamp: Date.now()});
-	} else {
-		res.set('WWW-Authenticate', 'Bearer realm=localhost:9002, error="insufficient_scope", scope="read"');
-		res.status(403);
-	}
-});
-
-app.post('/words', getAccessToken, requireAccessToken, function(req, res) {
-	if (__.contains(req.access_token.scope, 'write')) {
-		if (req.body.word) {
-			savedWords.push(req.body.word);
-		}
-		res.status(201).end();
-	} else {
-		res.set('WWW-Authenticate', 'Bearer realm=localhost:9002, error="insufficient_scope", scope="write"');
-		res.status(403);
-	}
-});
-
-app.delete('/words', getAccessToken, requireAccessToken, function(req, res) {
-	if (__.contains(req.access_token.scope, 'delete')) {
-		savedWords.pop();
-		res.status(201).end();
-	} else {
-		res.set('WWW-Authenticate', 'Bearer realm=localhost:9002, error="insufficient_scope", scope="delete"');
-		res.status(403);
-	}
-});
-
-app.get('/produce', getAccessToken, requireAccessToken, function(req, res) {
-	var produce = {fruit: [], veggies: [], meats: []};
-	if (__.contains(req.access_token.scope, 'fruit')) {
-		produce.fruit = ['apple', 'banana', 'kiwi'];
-	}
-	if (__.contains(req.access_token.scope, 'veggies')) {
-		produce.veggies = ['lettuce', 'onion', 'potato'];
-	}
-	if (__.contains(req.access_token.scope, 'meats')) {
-		produce.meats = ['bacon', 'steak', 'chicken breast'];
-	}
-	console.log('Sending produce: ', produce);
-	res.json(produce);
-});
-
-var aliceFavorites = {
-	'movies': ['The Multidmensional Vector', 'Space Fights', 'Jewelry Boss'],
-	'foods': ['bacon', 'pizza', 'bacon pizza'],
-	'music': ['techno', 'industrial', 'alternative']
-};
-
-var bobFavories = {
-	'movies': ['An Unrequited Love', 'Several Shades of Turquoise', 'Think Of The Children'],
-	'foods': ['bacon', 'kale', 'gravel'],
-	'music': ['baroque', 'ukulele', 'baroque ukulele']
-};
-
-app.get('/favorites', getAccessToken, requireAccessToken, function(req, res) {
-	if (req.access_token.user == 'alice') {
-		res.json({user: 'Alice', favorites: aliceFavorites});
-	} else if (req.access_token.user == 'bob') {
-		res.json({user: 'Bob', favorites: bobFavorites});
-	} else {
-		var unknown = {user: 'Unknown', favorites: {movies: [], foods: [], music: []}};
-		res.json(unknown);
-	}
-});
-
 app.options('/resource', cors());
 
 app.post("/resource", cors(), getAccessToken, function(req, res){
-
+	console.log(req.access_token);
 	if (req.access_token) {
 		res.json(resource);
 	} else {
@@ -237,6 +87,62 @@ app.post("/resource", cors(), getAccessToken, function(req, res){
 	}
 	
 });
+
+var userInfoEndpoint = function(req, res) {
+	
+	if (!__.contains(req.access_token.scope, 'openid')) {
+		res.status(403).end();
+		return;
+	}
+	
+	var user = req.access_token.user;
+	if (!user) {
+		res.status(404).end();
+		return;
+	}
+	
+	var out = {};
+	__.each(req.access_token.scope, function (scope) {
+		if (scope == 'openid') {
+			__.each(['sub'], function(claim) {
+				if (user[claim]) {
+					out[claim] = user[claim];
+				}
+			});
+		} else if (scope == 'profile') {
+			__.each(['name', 'family_name', 'given_name', 'middle_name', 'nickname', 'preferred_username', 'profile', 'picture', 'website', 'gender', 'birthdate', 'zoneinfo', 'locale', 'updated_at'], function(claim) {
+				if (user[claim]) {
+					out[claim] = user[claim];
+				}
+			});
+		} else if (scope == 'email') {
+			__.each(['email', 'email_verified'], function(claim) {
+				if (user[claim]) {
+					out[claim] = user[claim];
+				}
+			});
+		} else if (scope == 'address') {
+			__.each(['address'], function(claim) {
+				if (user[claim]) {
+					out[claim] = user[claim];
+				}
+			});
+		} else if (scope == 'phone') {
+			__.each(['phone_number', 'phone_number_verified'], function(claim) {
+				if (user[claim]) {
+					out[claim] = user[claim];
+				}
+			});
+		}
+	});
+	
+	res.status(200).json(out);
+	return;
+};
+
+app.get('/userinfo', getAccessToken, requireAccessToken, userInfoEndpoint);
+app.post('/userinfo', getAccessToken, requireAccessToken, userInfoEndpoint);
+
 
 var server = app.listen(9002, 'localhost', function () {
   var host = server.address().address;
